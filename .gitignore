@@ -1,0 +1,29 @@
+# Environnements virtuels
+venv/
+ENV/
+
+# Fichiers Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Fêtchiers de cache
+.pytest_cache/
+.mypy_cache/
+
+# Fichiers de configuration locaux
+*.local
+
+# Fichiers de sortie exportés
+*.mp4
+*.avi
+*.mov
+
+# Fichiers de projet
+.idea/
+.vscode/
+*.sublime-workspace
+
+# Fichiers système
+.DS_Store
+Thumbs.db
