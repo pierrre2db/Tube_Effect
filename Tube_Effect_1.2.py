@@ -494,20 +494,65 @@ class AnimationWorker(QThread):
 class PreferencesDialog(QDialog):
     def __init__(self, settings, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Préférences")
+        self.setWindowTitle("⚙️ Préférences")
+        self.setMinimumWidth(400)
         self.settings = settings.copy()
+
+        # Style moderne pour la boîte de dialogue
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2d2d2d;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton {
+                background-color: #4f46e5;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background-color: #6366f1;
+            }
+        """)
+
         layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+
+        # En-tête
+        header_label = QLabel("Personnaliser les couleurs de l'interface")
+        header_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #ffffff;")
+        layout.addWidget(header_label)
+
+        # Formulaire
         form_layout = QFormLayout()
-        self.trace_color_btn = QPushButton()
+        form_layout.setSpacing(12)
+
+        self.trace_color_btn = QPushButton("🎨 Choisir la couleur")
+        self.trace_color_btn.setToolTip("Couleur de la ligne de trajectoire")
         self.trace_color_btn.clicked.connect(lambda: self.pick_color('trace_color'))
-        self.shape_color_btn = QPushButton()
+
+        self.shape_color_btn = QPushButton("🎨 Choisir la couleur")
+        self.shape_color_btn.setToolTip("Couleur du contour de la forme")
         self.shape_color_btn.clicked.connect(lambda: self.pick_color('shape_color'))
+
         form_layout.addRow("Couleur de la Trajectoire:", self.trace_color_btn)
         form_layout.addRow("Couleur de la Forme:", self.shape_color_btn)
         layout.addLayout(form_layout)
+
+        # Boutons de validation
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("✓ Valider")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("✗ Annuler")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
         self.update_color_buttons()
 
     def pick_color(self, key):
@@ -540,20 +585,126 @@ class MainWindow(QMainWindow):
     
     def init_ui(self):
         """Initialise l'interface utilisateur"""
-        # Configuration de la fenêtre principale
+        # Configuration de la fenêtre principale avec style moderne
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1e1e1e;
+            }
+            QWidget {
+                background-color: #2d2d2d;
+                color: #e0e0e0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QPushButton {
+                background-color: #4f46e5;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-weight: 500;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #6366f1;
+            }
+            QPushButton:pressed {
+                background-color: #3730a3;
+            }
+            QPushButton:disabled {
+                background-color: #4a4a4a;
+                color: #7a7a7a;
+            }
+            QGroupBox {
+                border: 2px solid #4a4a4a;
+                border-radius: 8px;
+                margin-top: 12px;
+                padding-top: 12px;
+                font-weight: 600;
+                color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 4px 8px;
+                background-color: #3a3a3a;
+                border-radius: 4px;
+            }
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #3a3a3a;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #4f46e5;
+                border: 2px solid #6366f1;
+                width: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #6366f1;
+            }
+            QComboBox {
+                background-color: #3a3a3a;
+                border: 1px solid #4a4a4a;
+                border-radius: 4px;
+                padding: 6px;
+                color: #e0e0e0;
+            }
+            QComboBox:hover {
+                border-color: #6366f1;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3a3a3a;
+                selection-background-color: #4f46e5;
+                color: #e0e0e0;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-size: 12px;
+            }
+            QStatusBar {
+                background-color: #252525;
+                color: #e0e0e0;
+            }
+            QProgressBar {
+                border: 1px solid #4a4a4a;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #3a3a3a;
+            }
+            QProgressBar::chunk {
+                background-color: #4f46e5;
+                border-radius: 3px;
+            }
+        """)
+
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
-        
-        # Barre d'outils supérieure
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+
+        # Barre d'outils supérieure avec style amélioré
         top_bar = QHBoxLayout()
-        
-        # Boutons de contrôle
-        self.btn_load = QPushButton("Charger une image")
-        self.btn_save_path = QPushButton("Sauvegarder le tracé")
-        self.btn_load_path = QPushButton("Charger un tracé")
-        self.btn_prefs = QPushButton("Préférences")
-        
+        top_bar.setSpacing(8)
+
+        # Boutons de contrôle avec tooltips
+        self.btn_load = QPushButton("📁 Charger Image")
+        self.btn_load.setToolTip("Charger une image pour créer l'animation (PNG, JPG, BMP)")
+
+        self.btn_save_path = QPushButton("💾 Sauvegarder")
+        self.btn_save_path.setToolTip("Sauvegarder le tracé et les paramètres dans un fichier projet")
+
+        self.btn_load_path = QPushButton("📂 Charger Projet")
+        self.btn_load_path.setToolTip("Charger un projet existant avec son tracé")
+
+        self.btn_prefs = QPushButton("⚙️ Préférences")
+        self.btn_prefs.setToolTip("Configurer les couleurs et options avancées")
+
         # Ajout des boutons à la barre supérieure
         top_bar.addWidget(self.btn_load)
         top_bar.addWidget(self.btn_save_path)
@@ -561,95 +712,161 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(self.btn_prefs)
         top_bar.addStretch()
         
-        # Zone de visualisation
+        # Zone de visualisation avec style
         self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
         self.view.setMouseTracking(True)
+        self.view.setStyleSheet("""
+            QGraphicsView {
+                background-color: #1a1a1a;
+                border: 2px solid #4a4a4a;
+                border-radius: 8px;
+            }
+        """)
         self.view.mousePressEvent = self.view_mouse_press
         self.view.mouseMoveEvent = self.view_mouse_move
         self.view.mouseReleaseEvent = self.view_mouse_release
-        
+
         # Contrôles de l'application
         controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(10)
         
         # Groupe pour la forme
-        shape_group = QGroupBox("Forme")
+        shape_group = QGroupBox("🔷 Forme")
         shape_layout = QVBoxLayout()
         self.shape_combo = QComboBox()
         self.shape_combo.addItems(["Cercle", "Carré"])
+        self.shape_combo.setToolTip("Choisir la forme du projecteur (cercle ou carré)")
         shape_layout.addWidget(self.shape_combo)
         shape_group.setLayout(shape_layout)
-        
+
         # Groupe pour la taille
-        size_group = QGroupBox("Taille")
+        size_group = QGroupBox("📏 Taille")
         size_layout = QVBoxLayout()
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.size_label = QLabel(f"Taille ({self.settings['size']}px):")
+        self.size_slider.setToolTip("Ajuster la taille du projecteur (20-500px)")
+        self.size_label = QLabel(f"{self.settings['size']}px")
+        self.size_label.setStyleSheet("color: #4f46e5; font-weight: bold; font-size: 14px;")
         size_layout.addWidget(self.size_label)
         size_layout.addWidget(self.size_slider)
         size_group.setLayout(size_layout)
-        
+
         # Groupe pour la luminosité
-        bg_group = QGroupBox("Luminosité")
+        bg_group = QGroupBox("💡 Luminosité")
         bg_layout = QVBoxLayout()
         self.bg_slider = QSlider(Qt.Orientation.Horizontal)
-        self.bg_label = QLabel(f"Luminosité ({self.settings['brightness']}%):")
+        self.bg_slider.setToolTip("Contrôler la luminosité de l'arrière-plan (0-100%)")
+        self.bg_label = QLabel(f"{self.settings['brightness']}%")
+        self.bg_label.setStyleSheet("color: #4f46e5; font-weight: bold; font-size: 14px;")
         bg_layout.addWidget(self.bg_label)
         bg_layout.addWidget(self.bg_slider)
         bg_group.setLayout(bg_layout)
-        
+
         # Groupe pour la vitesse
-        speed_group = QGroupBox("Vitesse")
+        speed_group = QGroupBox("⚡ Vitesse")
         speed_layout = QVBoxLayout()
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.speed_label = QLabel(f"Vitesse ({self.settings['speed']} px/s):")
+        self.speed_slider.setToolTip("Définir la vitesse de déplacement du projecteur (20-1000 px/s)")
+        self.speed_label = QLabel(f"{self.settings['speed']} px/s")
+        self.speed_label.setStyleSheet("color: #4f46e5; font-weight: bold; font-size: 14px;")
         speed_layout.addWidget(self.speed_label)
         speed_layout.addWidget(self.speed_slider)
         speed_group.setLayout(speed_layout)
-        
+
         # Groupe pour les FPS
-        fps_group = QGroupBox("FPS")
+        fps_group = QGroupBox("🎬 FPS")
         fps_layout = QVBoxLayout()
         self.fps_combo = QComboBox()
         self.fps_combo.addItems(["15", "24", "25", "30", "50", "60"])
         self.fps_combo.setCurrentText(str(self.settings['fps']))
+        self.fps_combo.setToolTip("Images par seconde (plus élevé = plus fluide)")
         fps_layout.addWidget(self.fps_combo)
         fps_group.setLayout(fps_layout)
-        
+
         # Groupe pour le lissage
-        self.smoothing_group = QGroupBox("Lissage")
-        smoothing_layout = QHBoxLayout()
+        self.smoothing_group = QGroupBox("✨ Lissage")
+        smoothing_layout = QVBoxLayout()
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
         self.smoothing_slider.setValue(50)
+        self.smoothing_slider.setToolTip("Ajuster la douceur des courbes (0-100%)")
         self.smoothing_label = QLabel("50%")
-        smoothing_layout.addWidget(QLabel("Lissage:"))
-        smoothing_layout.addWidget(self.smoothing_slider)
+        self.smoothing_label.setStyleSheet("color: #4f46e5; font-weight: bold; font-size: 14px;")
         smoothing_layout.addWidget(self.smoothing_label)
+        smoothing_layout.addWidget(self.smoothing_slider)
         self.smoothing_group.setLayout(smoothing_layout)
         
         # Groupe pour les options d'exportation
-        export_group = QGroupBox("Exportation")
+        export_group = QGroupBox("🎥 Exportation")
         export_layout = QVBoxLayout()
-        
+
         # Sélection du profil d'exportation
-        profile_layout = QHBoxLayout()
-        profile_layout.addWidget(QLabel("Profil:"))
+        profile_label = QLabel("Résolution:")
+        profile_label.setStyleSheet("font-weight: 600; margin-bottom: 4px;")
+        export_layout.addWidget(profile_label)
+
         self.export_profile_combo = QComboBox()
         self.export_profile_combo.addItems(["HD 720p", "Full HD 1080p", "4K UHD"])
-        profile_layout.addWidget(self.export_profile_combo)
-        export_layout.addLayout(profile_layout)
-        
-        # Boutons d'action
-        action_layout = QVBoxLayout()
-        self.btn_preview = QPushButton("Prévisualiser")
-        self.btn_export = QPushButton("Exporter")
-        self.btn_reset = QPushButton("Réinitialiser")
-        action_layout.addWidget(self.btn_preview)
-        action_layout.addWidget(self.btn_export)
-        action_layout.addWidget(self.btn_reset)
-        
-        export_layout.addLayout(action_layout)
+        self.export_profile_combo.setToolTip("Choisir la résolution de la vidéo exportée")
+        export_layout.addWidget(self.export_profile_combo)
+
+        export_layout.addSpacing(8)
+
+        # Boutons d'action avec style
+        self.btn_preview = QPushButton("▶️ Prévisualiser")
+        self.btn_preview.setToolTip("Visualiser l'animation avant l'export")
+        self.btn_preview.setStyleSheet("""
+            QPushButton {
+                background-color: #10b981;
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #059669;
+            }
+            QPushButton:disabled {
+                background-color: #4a4a4a;
+                color: #7a7a7a;
+            }
+        """)
+
+        self.btn_export = QPushButton("📤 Exporter Vidéo")
+        self.btn_export.setToolTip("Exporter la vidéo finale (format MP4)")
+        self.btn_export.setStyleSheet("""
+            QPushButton {
+                background-color: #f59e0b;
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #d97706;
+            }
+            QPushButton:disabled {
+                background-color: #4a4a4a;
+                color: #7a7a7a;
+            }
+        """)
+
+        self.btn_reset = QPushButton("🔄 Réinitialiser")
+        self.btn_reset.setToolTip("Effacer le tracé et recommencer")
+        self.btn_reset.setStyleSheet("""
+            QPushButton {
+                background-color: #ef4444;
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #dc2626;
+            }
+            QPushButton:disabled {
+                background-color: #4a4a4a;
+                color: #7a7a7a;
+            }
+        """)
+
+        export_layout.addWidget(self.btn_preview)
+        export_layout.addWidget(self.btn_export)
+        export_layout.addWidget(self.btn_reset)
         export_group.setLayout(export_layout)
         
         # Ajout des groupes aux contrôles
@@ -721,9 +938,9 @@ class MainWindow(QMainWindow):
         self.calculate_and_display_duration()
 
     def update_all_labels(self):
-        self.size_label.setText(f"Taille ({self.settings['size']}px):")
-        self.bg_label.setText(f"Luminosité ({self.settings['brightness']}%):")
-        self.speed_label.setText(f"Vitesse ({self.settings['speed']} px/s):")
+        self.size_label.setText(f"{self.settings['size']}px")
+        self.bg_label.setText(f"{self.settings['brightness']}%")
+        self.speed_label.setText(f"{self.settings['speed']} px/s")
     
     def open_preferences(self):
         dialog = PreferencesDialog(self.settings, self)
@@ -732,25 +949,63 @@ class MainWindow(QMainWindow):
             self.sync_scene_from_data()
 
     def load_image(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Ouvrir une image", "", "Images (*.png *.jpg *.bmp)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "📁 Ouvrir une image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp);;Tous les fichiers (*)"
+        )
         if path:
-            self.image_path, self.cv_image = path, cv2.imread(path)
-            pixmap = QPixmap(self.image_path)
-            self.scene.clear()
-            self.scene.addPixmap(pixmap)
-            height = self.cv_image.shape[0]
-            self.size_slider.setMaximum(height)
-            self.settings['size'] = int(height / 4)
-            self.size_slider.setValue(self.settings['size'])
-            self.overlay_item = QGraphicsRectItem(QRectF(pixmap.rect()))
-            self.overlay_item.setZValue(5)
-            self.scene.addItem(self.overlay_item)
-            self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-            
-            # Initialisation de l'éditeur de chemin
-            self.path_editor = PathEditor(self.scene)
-            self.reset_path()
-            self.update_brightness_overlay()
+            try:
+                self.cv_image = cv2.imread(path)
+                if self.cv_image is None:
+                    QMessageBox.critical(
+                        self,
+                        "❌ Erreur",
+                        "Impossible de charger l'image.\nVérifiez que le fichier est une image valide."
+                    )
+                    return
+
+                self.image_path = path
+                pixmap = QPixmap(self.image_path)
+                self.scene.clear()
+                self.scene.addPixmap(pixmap)
+                height = self.cv_image.shape[0]
+                self.size_slider.setMaximum(height)
+                self.settings['size'] = int(height / 4)
+                self.size_slider.setValue(self.settings['size'])
+                self.overlay_item = QGraphicsRectItem(QRectF(pixmap.rect()))
+                self.overlay_item.setZValue(5)
+                self.scene.addItem(self.overlay_item)
+                self.view.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
+
+                # Initialisation de l'éditeur de chemin
+                self.path_editor = PathEditor(self.scene)
+                self.reset_path()
+                self.update_brightness_overlay()
+
+                # Message d'instructions
+                self.status_label.setText("✓ Image chargée | Cliquez pour dessiner le tracé")
+
+                # Afficher un message d'aide la première fois
+                if not hasattr(self, '_help_shown'):
+                    self._help_shown = True
+                    QMessageBox.information(
+                        self,
+                        "💡 Instructions",
+                        "<b>Comment utiliser l'application :</b><br><br>"
+                        "1. <b>Cliquez</b> sur l'image pour créer des points de tracé<br>"
+                        "2. <b>Maj + Glisser</b> pour déplacer un point existant<br>"
+                        "3. <b>Ajustez</b> les paramètres (taille, vitesse, lissage)<br>"
+                        "4. <b>Prévisualisez</b> l'animation<br>"
+                        "5. <b>Exportez</b> votre vidéo !"
+                    )
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "❌ Erreur",
+                    f"Une erreur est survenue lors du chargement :\n{str(e)}"
+                )
 
     def update_brightness_overlay(self):
         if self.overlay_item:
@@ -758,23 +1013,73 @@ class MainWindow(QMainWindow):
             self.overlay_item.setBrush(QColor(0, 0, 0, alpha))
 
     def save_path(self):
-        if not self.path_points: return
-        path, _ = QFileDialog.getSaveFileName(self, "Sauvegarder le projet", "", "Projet Vidéo (*.json)")
-        if path:
-            with open(path, 'w') as f: json.dump({"settings": self.settings, "path_points": self.path_points}, f, indent=4)
-
-    def load_path(self):
-        if self.cv_image is None: return
-        path, _ = QFileDialog.getOpenFileName(self, "Charger un projet", "", "Projet Vidéo (*.json)")
+        if not self.path_points:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "💾 Sauvegarder le projet",
+            "",
+            "Projet Vidéo (*.json)"
+        )
         if path:
             try:
-                with open(path, 'r') as f: project_data = json.load(f)
+                with open(path, 'w') as f:
+                    json.dump(
+                        {
+                            "settings": self.settings,
+                            "path_points": self.path_points
+                        },
+                        f,
+                        indent=4
+                    )
+                self.status_label.setText(f"✓ Projet sauvegardé : {path}")
+                QMessageBox.information(
+                    self,
+                    "✓ Succès",
+                    "Le projet a été sauvegardé avec succès !"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "❌ Erreur",
+                    f"Impossible de sauvegarder le projet :\n{str(e)}"
+                )
+
+    def load_path(self):
+        if self.cv_image is None:
+            QMessageBox.warning(
+                self,
+                "⚠️ Attention",
+                "Veuillez d'abord charger une image avant de charger un projet."
+            )
+            return
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "📂 Charger un projet",
+            "",
+            "Projet Vidéo (*.json)"
+        )
+        if path:
+            try:
+                with open(path, 'r') as f:
+                    project_data = json.load(f)
                 self.settings = project_data.get("settings", DEFAULT_SETTINGS.copy())
                 self.path_points = project_data.get("path_points", [])
                 self.init_controls()
                 self.sync_scene_from_data()
+                self.status_label.setText(f"✓ Projet chargé : {len(self.path_points)} points")
+                QMessageBox.information(
+                    self,
+                    "✓ Succès",
+                    f"Le projet a été chargé avec succès !\n{len(self.path_points)} points de tracé restaurés."
+                )
             except Exception as e:
-                print(f"Erreur lors du chargement du fichier projet : {e}")
+                QMessageBox.critical(
+                    self,
+                    "❌ Erreur",
+                    f"Impossible de charger le projet :\n{str(e)}"
+                )
 
     def update_smoothing(self, value):
         """Met à jour le niveau de lissage du chemin"""
@@ -945,16 +1250,33 @@ class MainWindow(QMainWindow):
         else: self.btn_preview.setEnabled(True)
     
     def reset_path(self):
+        # Confirmation avant de réinitialiser
+        if self.path_points and len(self.path_points) > 0:
+            reply = QMessageBox.question(
+                self,
+                "🔄 Confirmation",
+                "Voulez-vous vraiment effacer tout le tracé ?\nCette action est irréversible.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+
         if self.path_editor:
             self.path_editor.clear()
         self.path_points = []
         self.sync_scene_from_data()
+        self.status_label.setText("Tracé réinitialisé")
 
     def toggle_preview_animation(self):
-        if self.preview_worker and self.preview_worker.isRunning(): self.preview_worker.stop()
+        if self.preview_worker and self.preview_worker.isRunning():
+            self.preview_worker.stop()
+            self.status_label.setText("Arrêt de la prévisualisation...")
         else:
-            if not (self.cv_image is not None and len(self.path_points) >= 2): return
-            self.btn_preview.setText("Arrêter")
+            if not (self.cv_image is not None and len(self.path_points) >= 2):
+                return
+            self.btn_preview.setText("⏹️ Arrêter")
+            self.status_label.setText("▶️ Prévisualisation en cours...")
             self.update_button_states(is_previewing=True)
             self.preview_worker = AnimationWorker(self.path_points, self.settings, self.cv_image, None)
             self.preview_worker.frame_ready_for_preview.connect(self.update_preview_frame)
@@ -1042,16 +1364,37 @@ class MainWindow(QMainWindow):
         
     def animation_finished(self):
         sender = self.sender()
-        if sender == self.preview_worker: self.preview_worker = None
-        elif sender == self.export_worker: self.export_worker = None
+        was_export = False
+
+        if sender == self.preview_worker:
+            self.preview_worker = None
+            self.status_label.setText("Prévisualisation terminée")
+        elif sender == self.export_worker:
+            was_export = True
+            self.export_worker = None
+            self.status_label.setText("✓ Exportation terminée avec succès !")
+            # Afficher un message de succès
+            QMessageBox.information(
+                self,
+                "✓ Export réussi",
+                "<b>Votre vidéo a été exportée avec succès !</b><br><br>"
+                "Vous pouvez maintenant la visualiser ou la partager."
+            )
+
         if self.image_path:
             pixmap = QPixmap(self.image_path)
-            current_pixmap_item = next((item for item in self.scene.items() if isinstance(item, QGraphicsPixmapItem)), None)
-            if current_pixmap_item: current_pixmap_item.setPixmap(pixmap)
-            else: self.scene.addPixmap(pixmap)
+            current_pixmap_item = next(
+                (item for item in self.scene.items() if isinstance(item, QGraphicsPixmapItem)),
+                None
+            )
+            if current_pixmap_item:
+                current_pixmap_item.setPixmap(pixmap)
+            else:
+                self.scene.addPixmap(pixmap)
             self.update_brightness_overlay()
             self.sync_scene_from_data()
-        self.btn_preview.setText("Animer")
+
+        self.btn_preview.setText("▶️ Prévisualiser")
         self.update_button_states()
 
 if __name__ == '__main__':

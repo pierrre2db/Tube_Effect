@@ -4,6 +4,14 @@
 
 Une application Python pour créer des animations vidéo avec un effet de projecteur qui suit un tracé personnalisé sur vos images.
 
+## ✨ Nouveautés v1.3 - Interface Modernisée !
+
+- 🎨 **Design sombre moderne** : Interface élégante avec palette de couleurs professionnelle
+- 💡 **Tooltips informatifs** : Chaque contrôle dispose d'une aide contextuelle
+- 🎯 **Messages améliorés** : Notifications claires avec icônes pour chaque action
+- ⚡ **Feedback visuel** : Effets hover et états interactifs sur tous les boutons
+- 📊 **Barre d'état enrichie** : Informations en temps réel sur vos actions
+
 ## 🚀 Fonctionnalités
 
 - 🖼️ Chargement d'images (PNG, JPG, BMP)
@@ -13,8 +21,10 @@ Une application Python pour créer des animations vidéo avec un effet de projec
   - Taille du projecteur
   - Vitesse de déplacement
   - Luminosité du fond
+  - Lissage des courbes
 - 🎥 Export vidéo en haute qualité (jusqu'à 4K)
 - ⚡ Prévisualisation en temps réel
+- 💾 Sauvegarde et chargement de projets
 
 ## 📦 Installation
 
@@ -42,11 +52,34 @@ Une application Python pour créer des animations vidéo avec un effet de projec
    python Tube_Effect_1.2.py
    ```
 
-2. Chargez une image
-3. Créez votre tracé en cliquant sur l'image
-4. Ajustez les paramètres selon vos besoins
-5. Prévisualisez l'animation
-6. Exportez votre vidéo
+2. **Chargez une image** : Cliquez sur "📁 Charger Image"
+   - Un message d'aide s'affichera automatiquement au premier lancement
+
+3. **Créez votre tracé** :
+   - Cliquez sur l'image pour ajouter des points
+   - Maintenez **Maj** et glissez un point pour le déplacer
+   - Les courbes sont automatiquement lissées
+
+4. **Ajustez les paramètres** :
+   - 📏 **Taille** : Dimension du projecteur (20-500px)
+   - 💡 **Luminosité** : Obscurité de l'arrière-plan (0-100%)
+   - ⚡ **Vitesse** : Rapidité du déplacement (20-1000 px/s)
+   - ✨ **Lissage** : Douceur des courbes (0-100%)
+   - 🎬 **FPS** : Fluidité de l'animation (15-60)
+
+5. **Prévisualisez** : Cliquez sur "▶️ Prévisualiser" pour voir le résultat
+
+6. **Exportez** : Cliquez sur "📤 Exporter Vidéo"
+   - Choisissez la résolution (HD, Full HD, ou 4K)
+   - Sélectionnez l'emplacement de sauvegarde
+   - Une notification vous confirmera le succès
+
+### 💡 Astuces
+
+- **Survolez** les contrôles pour voir des explications détaillées
+- **Sauvegardez** vos projets pour les reprendre plus tard
+- Les valeurs des paramètres s'affichent en temps réel
+- La durée estimée de l'animation est visible dans la barre d'état
 
 ## 📝 Licence
 
@@ -58,7 +91,8 @@ Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou un
 
 ## 📄 Documentation
 
-Consultez le [document de spécifications](specifications.md) pour une documentation technique détaillée.
+- [Spécifications techniques](specifications.md) - Documentation technique détaillée
+- [Journal des modifications](CHANGELOG.md) - Historique complet des améliorations de l'interface
 
 ## 📞 Contact
 
