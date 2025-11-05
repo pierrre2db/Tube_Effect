@@ -1,7 +1,7 @@
 # =============================================================================
 # --- Importations des bibliothèques nécessaires ---
 # =============================================================================
-# last edit 13/06/25 14:05
+# last edit 05/11/25 - Enhanced with multiple effects and advanced path editing
 import sys
 import cv2
 import numpy as np
@@ -12,20 +12,268 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QSlider, QFileDialog, QGraphicsView,
     QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QProgressDialog,
     QGraphicsLineItem, QGroupBox, QComboBox, QGraphicsRectItem, QGraphicsObject, QGraphicsItem,
-    QColorDialog, QDialog, QDialogButtonBox, QFormLayout, QStatusBar, QProgressBar, QMessageBox
+    QColorDialog, QDialog, QDialogButtonBox, QFormLayout, QStatusBar, QProgressBar, QMessageBox,
+    QGraphicsTextItem
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPointF, QRectF, QRect
-from PyQt6.QtGui import QPixmap, QImage, QPen, QBrush, QColor, QIcon, QPainterPath, QPainter
+from PyQt6.QtGui import QPixmap, QImage, QPen, QBrush, QColor, QIcon, QPainterPath, QPainter, QFont
+
+# =============================================================================
+# --- Classes pour le système d'effets ---
+# =============================================================================
+
+class Effect:
+    """Classe de base pour tous les effets visuels"""
+
+    def __init__(self, name, description):
+        self.name = name
+        self.description = description
+
+    def get_parameters(self):
+        """Retourne la liste des paramètres configurables de l'effet"""
+        return []
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        """Applique l'effet sur l'image
+
+        Args:
+            image: Image originale
+            dark_image: Image assombrie (fond)
+            x, y: Position du centre de l'effet
+            size: Taille de la zone d'effet
+            settings: Dictionnaire des paramètres
+
+        Returns:
+            Image avec l'effet appliqué
+        """
+        raise NotImplementedError("Les classes dérivées doivent implémenter apply()")
+
+
+class SpotlightEffect(Effect):
+    """Effet spotlight classique (cercle ou carré éclairé)"""
+
+    def __init__(self):
+        super().__init__("Spotlight Classic", "Zone éclairée qui suit le chemin")
+
+    def get_parameters(self):
+        return ['shape', 'brightness']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        mask = np.zeros(image.shape[:2], dtype="uint8")
+
+        if settings.get('shape') == "Cercle":
+            cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
+        else:
+            half_size = int(size / 2)
+            cv2.rectangle(mask, (int(x - half_size), int(y - half_size)),
+                         (int(x + half_size), int(y + half_size)), 255, -1)
+
+        mask_3d = mask[:, :, np.newaxis] > 0
+        return np.where(mask_3d, image, dark_image)
+
+
+class SpotlightGlowEffect(Effect):
+    """Effet spotlight avec halo/glow progressif"""
+
+    def __init__(self):
+        super().__init__("Spotlight avec Glow", "Zone éclairée avec bordures floues progressives")
+
+    def get_parameters(self):
+        return ['shape', 'brightness', 'glow_intensity']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        mask = np.zeros(image.shape[:2], dtype="float32")
+        glow_intensity = settings.get('glow_intensity', 50) / 100.0
+
+        # Créer un masque avec dégradé
+        h, w = image.shape[:2]
+        y_coords, x_coords = np.ogrid[:h, :w]
+
+        if settings.get('shape') == "Cercle":
+            # Distance depuis le centre
+            distances = np.sqrt((x_coords - x)**2 + (y_coords - y)**2)
+            radius = size / 2
+            glow_radius = radius * (1 + glow_intensity)
+
+            # Dégradé progressif
+            mask = np.clip((glow_radius - distances) / (glow_radius - radius), 0, 1)
+        else:
+            # Carré avec coins arrondis
+            half_size = size / 2
+            glow_size = half_size * (1 + glow_intensity)
+
+            dx = np.maximum(np.abs(x_coords - x) - half_size, 0)
+            dy = np.maximum(np.abs(y_coords - y) - half_size, 0)
+            distances = np.sqrt(dx**2 + dy**2)
+
+            mask = np.clip((glow_size - half_size - distances) / (glow_size - half_size), 0, 1)
+
+        mask_3d = mask[:, :, np.newaxis]
+        return (mask_3d * image + (1 - mask_3d) * dark_image).astype(np.uint8)
+
+
+class VignetteEffect(Effect):
+    """Effet vignette animée"""
+
+    def __init__(self):
+        super().__init__("Vignette Animée", "Assombrissement radial qui suit le chemin")
+
+    def get_parameters(self):
+        return ['brightness', 'vignette_radius']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        h, w = image.shape[:2]
+        y_coords, x_coords = np.ogrid[:h, :w]
+
+        vignette_radius = settings.get('vignette_radius', 300)
+        distances = np.sqrt((x_coords - x)**2 + (y_coords - y)**2)
+
+        # Créer un masque inversé (sombre au centre, clair aux bords)
+        mask = np.clip(distances / vignette_radius, 0, 1)
+        mask_3d = mask[:, :, np.newaxis]
+
+        return (mask_3d * dark_image + (1 - mask_3d) * image).astype(np.uint8)
+
+
+class ColorGradingEffect(Effect):
+    """Effet de coloration sur le spotlight"""
+
+    def __init__(self):
+        super().__init__("Color Grading", "Applique une teinte de couleur sur la zone éclairée")
+
+    def get_parameters(self):
+        return ['shape', 'brightness', 'effect_color', 'color_intensity']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        mask = np.zeros(image.shape[:2], dtype="uint8")
+
+        if settings.get('shape') == "Cercle":
+            cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
+        else:
+            half_size = int(size / 2)
+            cv2.rectangle(mask, (int(x - half_size), int(y - half_size)),
+                         (int(x + half_size), int(y + half_size)), 255, -1)
+
+        # Créer une couche de couleur
+        color_hex = settings.get('effect_color', '#FF00FF')
+        color = QColor(color_hex)
+        color_array = np.array([color.blue(), color.green(), color.red()], dtype=np.uint8)
+        color_layer = np.full(image.shape, color_array, dtype=np.uint8)
+
+        # Intensité de la couleur
+        color_intensity = settings.get('color_intensity', 50) / 100.0
+
+        # Mélanger l'image avec la couleur dans la zone du masque
+        mask_3d = mask[:, :, np.newaxis] > 0
+        highlighted = np.where(mask_3d, image, dark_image)
+        colored = cv2.addWeighted(highlighted, 1 - color_intensity, color_layer, color_intensity, 0)
+
+        return np.where(mask_3d, colored, dark_image)
+
+
+class ZoomEffect(Effect):
+    """Effet de zoom/loupe"""
+
+    def __init__(self):
+        super().__init__("Zoom/Lens", "Effet de grossissement qui suit le chemin")
+
+    def get_parameters(self):
+        return ['brightness', 'zoom_intensity']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        zoom_factor = 1 + settings.get('zoom_intensity', 50) / 100.0
+        h, w = image.shape[:2]
+
+        # Créer une zone zoomée
+        radius = int(size / 2)
+        x1, y1 = max(0, int(x - radius)), max(0, int(y - radius))
+        x2, y2 = min(w, int(x + radius)), min(h, int(y + radius))
+
+        if x2 > x1 and y2 > y1:
+            # Extraire la région
+            roi = image[y1:y2, x1:x2]
+
+            # Zoomer depuis le centre
+            zoom_h, zoom_w = roi.shape[:2]
+            center_x, center_y = zoom_w // 2, zoom_h // 2
+            new_w, new_h = int(zoom_w / zoom_factor), int(zoom_h / zoom_factor)
+
+            crop_x1 = max(0, center_x - new_w // 2)
+            crop_y1 = max(0, center_y - new_h // 2)
+            crop_x2 = min(zoom_w, crop_x1 + new_w)
+            crop_y2 = min(zoom_h, crop_y1 + new_h)
+
+            cropped = roi[crop_y1:crop_y2, crop_x1:crop_x2]
+            zoomed = cv2.resize(cropped, (zoom_w, zoom_h), interpolation=cv2.INTER_LINEAR)
+
+            # Créer un masque circulaire
+            mask = np.zeros((zoom_h, zoom_w), dtype="uint8")
+            cv2.circle(mask, (zoom_w // 2, zoom_h // 2), min(zoom_w, zoom_h) // 2, 255, -1)
+            mask_3d = mask[:, :, np.newaxis] > 0
+
+            # Appliquer le zoom avec le masque
+            result = dark_image.copy()
+            result[y1:y2, x1:x2] = np.where(mask_3d, zoomed, dark_image[y1:y2, x1:x2])
+            return result
+
+        return dark_image
+
+
+class BlurFocusEffect(Effect):
+    """Effet de flou partout sauf sur le spotlight"""
+
+    def __init__(self):
+        super().__init__("Blur Focus", "Flou partout sauf sur la zone focalisée")
+
+    def get_parameters(self):
+        return ['shape', 'blur_intensity']
+
+    def apply(self, image, dark_image, x, y, size, settings):
+        blur_intensity = settings.get('blur_intensity', 50)
+        kernel_size = max(3, int(blur_intensity / 5) * 2 + 1)  # Doit être impair
+
+        # Flouter toute l'image
+        blurred = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+
+        # Créer un masque pour la zone nette
+        mask = np.zeros(image.shape[:2], dtype="uint8")
+
+        if settings.get('shape') == "Cercle":
+            cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
+        else:
+            half_size = int(size / 2)
+            cv2.rectangle(mask, (int(x - half_size), int(y - half_size)),
+                         (int(x + half_size), int(y + half_size)), 255, -1)
+
+        # Adoucir les bords du masque
+        mask = cv2.GaussianBlur(mask, (21, 21), 0)
+        mask_3d = mask[:, :, np.newaxis] / 255.0
+
+        # Combiner image nette et floue
+        return (mask_3d * image + (1 - mask_3d) * blurred).astype(np.uint8)
+
+
+# Registre des effets disponibles
+EFFECTS_REGISTRY = {
+    "Spotlight Classic": SpotlightEffect(),
+    "Spotlight avec Glow": SpotlightGlowEffect(),
+    "Vignette Animée": VignetteEffect(),
+    "Color Grading": ColorGradingEffect(),
+    "Zoom/Lens": ZoomEffect(),
+    "Blur Focus": BlurFocusEffect()
+}
+
 
 class PathEditor:
     """
     Classe pour gérer l'édition avancée des tracés avec support des courbes de Bézier.
     Permet de créer et modifier des chemins lisses avec des points de contrôle interactifs.
+    Supporte maintenant: undo/redo, suppression de points, numérotation, et tooltips.
     """
     def __init__(self, scene):
         """
         Initialise l'éditeur de chemin.
-        
+
         Args:
             scene: La scène QGraphicsScene où le chemin sera affiché
         """
@@ -34,23 +282,116 @@ class PathEditor:
         self.bezier_handles = []     # Poignées de Bézier pour les courbes
         self.smoothing = 0.5         # Niveau de lissage (0.0 à 1.0)
         self.show_handles = True     # Afficher les poignées de contrôle
+        self.show_numbering = True   # Afficher la numérotation des points
+
+        # Historique pour undo/redo
+        self.history = []            # Pile d'historique
+        self.history_index = -1      # Position actuelle dans l'historique
+        self.max_history = 50        # Nombre max d'états dans l'historique
         
+    def save_state(self):
+        """Sauvegarde l'état actuel pour l'historique undo/redo"""
+        # Supprimer les états après l'index actuel si on est au milieu de l'historique
+        if self.history_index < len(self.history) - 1:
+            self.history = self.history[:self.history_index + 1]
+
+        # Ajouter le nouvel état (copie profonde)
+        import copy
+        self.history.append(copy.deepcopy(self.points))
+
+        # Limiter la taille de l'historique
+        if len(self.history) > self.max_history:
+            self.history.pop(0)
+        else:
+            self.history_index += 1
+
+    def undo(self):
+        """Annule la dernière action"""
+        if self.history_index > 0:
+            self.history_index -= 1
+            import copy
+            self.points = copy.deepcopy(self.history[self.history_index])
+            self.update_bezier_handles()
+            self.redraw()
+            return True
+        return False
+
+    def redo(self):
+        """Refait l'action annulée"""
+        if self.history_index < len(self.history) - 1:
+            self.history_index += 1
+            import copy
+            self.points = copy.deepcopy(self.history[self.history_index])
+            self.update_bezier_handles()
+            self.redraw()
+            return True
+        return False
+
     def add_point(self, pos, size):
         """
         Ajoute un nouveau point de contrôle au chemin.
-        
+
         Args:
             pos: Position QPointF du nouveau point
             size: Taille du point (pour le rendu)
-            
+
         Returns:
             int: Index du point ajouté
         """
         point = {"x": pos.x(), "y": pos.y(), "size": size}
         self.points.append(point)
+        self.save_state()  # Sauvegarder pour undo/redo
         self.update_bezier_handles()  # Met à jour les poignées de Bézier
         self.redraw()  # Redessine le chemin
         return len(self.points) - 1  # Retourne l'index du point
+
+    def delete_point(self, index):
+        """Supprime un point de contrôle du chemin
+
+        Args:
+            index: Index du point à supprimer
+
+        Returns:
+            bool: True si la suppression a réussi
+        """
+        if 0 <= index < len(self.points):
+            self.points.pop(index)
+            self.save_state()
+            self.update_bezier_handles()
+            self.redraw()
+            return True
+        return False
+
+    def update_point(self, index, pos):
+        """Met à jour la position d'un point existant
+
+        Args:
+            index: Index du point à modifier
+            pos: Nouvelle position QPointF
+        """
+        if 0 <= index < len(self.points):
+            self.points[index]["x"] = pos.x()
+            self.points[index]["y"] = pos.y()
+            self.update_bezier_handles()
+            self.redraw()
+
+    def find_point_at(self, pos, tolerance=10):
+        """Trouve un point proche de la position donnée
+
+        Args:
+            pos: Position QPointF à vérifier
+            tolerance: Distance maximale en pixels
+
+        Returns:
+            int: Index du point trouvé, ou -1 si aucun
+        """
+        for i, point in enumerate(self.points):
+            dx = point["x"] - pos.x()
+            dy = point["y"] - pos.y()
+            distance = math.sqrt(dx * dx + dy * dy)
+            if distance <= tolerance:
+                return i
+        return -1
     
     def update_bezier_handles(self):
         """
@@ -147,24 +488,25 @@ class PathEditor:
         """
         Redessine l'ensemble du chemin et ses éléments de contrôle dans la scène.
         Cette méthode est appelée à chaque modification du chemin.
+        Inclut maintenant la numérotation des points.
         """
         # Supprime tous les éléments graphiques précédents du chemin
         for item in self.scene.items():
             if hasattr(item, 'is_path_element') and item.is_path_element:
                 self.scene.removeItem(item)
-        
+
         # Vérifie s'il y a assez de points pour former un chemin
         if len(self.points) >= 2:
             # Création du style pour le chemin principal
             pen = QPen(QColor("#4f46e5"), 2, Qt.PenStyle.SolidLine)
-            
+
             # Obtention du chemin lissé
             path = self.get_smoothed_path()
-            
+
             # Ajout du chemin à la scène
             path_item = self.scene.addPath(path, pen)
             path_item.is_path_element = True  # Marque l'élément pour une suppression facile
-            
+
             # Dessin des points de contrôle
             for i, point in enumerate(self.points):
                 # Dessin du point principal
@@ -178,12 +520,35 @@ class PathEditor:
                 )
                 point_item.is_path_element = True
                 point_item.setZValue(15)  # S'assure que les points sont au-dessus du chemin
-                
+
+                # Numérotation des points
+                if self.show_numbering:
+                    text_item = QGraphicsTextItem(str(i + 1))
+                    text_item.setDefaultTextColor(QColor("#ffffff"))
+                    font = QFont("Arial", 10, QFont.Weight.Bold)
+                    text_item.setFont(font)
+
+                    # Positionner le texte légèrement décalé du point
+                    text_item.setPos(point["x"] + 10, point["y"] - 15)
+                    text_item.setZValue(16)
+                    text_item.is_path_element = True
+
+                    # Ajouter un fond semi-transparent pour meilleure lisibilité
+                    bg_rect = self.scene.addRect(
+                        text_item.boundingRect().translated(text_item.pos()),
+                        QPen(Qt.PenStyle.NoPen),
+                        QBrush(QColor(0, 0, 0, 150))
+                    )
+                    bg_rect.setZValue(15.5)
+                    bg_rect.is_path_element = True
+
+                    self.scene.addItem(text_item)
+
                 # Dessin des poignées de Bézier si activé et pour les points intermédiaires
-                if (self.show_handles and 
-                    0 < i < len(self.points) - 1 and 
+                if (self.show_handles and
+                    0 < i < len(self.points) - 1 and
                     i-1 < len(self.bezier_handles)):
-                    
+
                     self._draw_bezier_handles(i, point)
     
     def _draw_bezier_handles(self, point_index, point):
@@ -288,7 +653,15 @@ DEFAULT_SETTINGS = {
     "fps": 50,
     "shape": "Cercle",
     "trace_color": "#FFFF00",
-    "shape_color": "#00FFFF"
+    "shape_color": "#00FFFF",
+    "effect": "Spotlight Classic",
+    # Paramètres spécifiques aux effets
+    "glow_intensity": 50,
+    "vignette_radius": 300,
+    "effect_color": "#FF00FF",
+    "color_intensity": 50,
+    "zoom_intensity": 50,
+    "blur_intensity": 50
 }
 
 # =============================================================================
@@ -445,35 +818,25 @@ class AnimationWorker(QThread):
 
     def create_highlight_frame(self, dark_image, x, y, size):
         """
-        Crée une frame avec une zone mise en évidence.
-        
+        Crée une frame avec une zone mise en évidence en utilisant l'effet sélectionné.
+
         Args:
             dark_image: Image de fond assombrie
             x, y: Position du centre de la zone
             size: Taille de la zone
-            
+
         Returns:
             Image avec la zone mise en évidence
         """
-        # Création d'un masque pour la zone éclairée
-        mask = np.zeros(self.image.shape[:2], dtype="uint8")
-        
-        # Dessin de la forme sélectionnée dans le masque
-        if self.settings['shape'] == "Cercle":
-            cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
-        elif self.settings['shape'] == "Carré":
-            half_size = int(size / 2)
-            cv2.rectangle(
-                mask, 
-                (int(x - half_size), int(y - half_size)), 
-                (int(x + half_size), int(y + half_size)), 
-                255, 
-                -1
-            )
-        
-        # Application du masque pour combiner les images
-        mask_3d = mask[:, :, np.newaxis] > 0
-        return np.where(mask_3d, self.image, dark_image)
+        # Récupérer l'effet sélectionné
+        effect_name = self.settings.get('effect', 'Spotlight Classic')
+        effect = EFFECTS_REGISTRY.get(effect_name)
+
+        if effect:
+            return effect.apply(self.image, dark_image, x, y, size, self.settings)
+        else:
+            # Fallback vers l'effet classique si l'effet n'existe pas
+            return SpotlightEffect().apply(self.image, dark_image, x, y, size, self.settings)
         
     def calculate_distance(self, p1, p2):
         """
@@ -524,8 +887,8 @@ class PreferencesDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Créateur d'Animation Vidéo v1.9")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle("Tube Effect - Créateur d'Animation Vidéo v2.0")
+        self.setGeometry(100, 100, 1600, 900)
         
         self.settings = DEFAULT_SETTINGS.copy()
         self.image_path, self.cv_image = None, None
@@ -571,7 +934,17 @@ class MainWindow(QMainWindow):
         
         # Contrôles de l'application
         controls_layout = QHBoxLayout()
-        
+
+        # Groupe pour les effets
+        effect_group = QGroupBox("Effet")
+        effect_layout = QVBoxLayout()
+        self.effect_combo = QComboBox()
+        self.effect_combo.addItems(list(EFFECTS_REGISTRY.keys()))
+        self.effect_combo.setCurrentText(self.settings['effect'])
+        effect_layout.addWidget(QLabel("Type d'effet:"))
+        effect_layout.addWidget(self.effect_combo)
+        effect_group.setLayout(effect_layout)
+
         # Groupe pour la forme
         shape_group = QGroupBox("Forme")
         shape_layout = QVBoxLayout()
@@ -627,7 +1000,16 @@ class MainWindow(QMainWindow):
         smoothing_layout.addWidget(self.smoothing_slider)
         smoothing_layout.addWidget(self.smoothing_label)
         self.smoothing_group.setLayout(smoothing_layout)
-        
+
+        # Groupe pour les paramètres d'effets (dynamique)
+        self.effect_params_group = QGroupBox("Paramètres de l'effet")
+        self.effect_params_layout = QVBoxLayout()
+        self.effect_params_group.setLayout(self.effect_params_layout)
+
+        # Créer les widgets pour tous les paramètres d'effets
+        self.effect_widgets = {}
+        self._create_effect_widgets()
+
         # Groupe pour les options d'exportation
         export_group = QGroupBox("Exportation")
         export_layout = QVBoxLayout()
@@ -651,14 +1033,16 @@ class MainWindow(QMainWindow):
         
         export_layout.addLayout(action_layout)
         export_group.setLayout(export_layout)
-        
+
         # Ajout des groupes aux contrôles
+        controls_layout.addWidget(effect_group)
         controls_layout.addWidget(shape_group)
         controls_layout.addWidget(size_group)
         controls_layout.addWidget(bg_group)
         controls_layout.addWidget(speed_group)
         controls_layout.addWidget(fps_group)
         controls_layout.addWidget(self.smoothing_group)
+        controls_layout.addWidget(self.effect_params_group)
         controls_layout.addWidget(export_group)
         
         # Barre d'état
@@ -683,6 +1067,117 @@ class MainWindow(QMainWindow):
         # Initialisation des contrôles
         self.init_controls()
         self.update_button_states()
+    def _create_effect_widgets(self):
+        """Crée tous les widgets pour les paramètres d'effets"""
+        # Glow Intensity
+        glow_layout = QHBoxLayout()
+        self.glow_slider = QSlider(Qt.Orientation.Horizontal)
+        self.glow_slider.setRange(0, 100)
+        self.glow_slider.setValue(self.settings['glow_intensity'])
+        self.glow_label = QLabel(f"{self.settings['glow_intensity']}%")
+        glow_layout.addWidget(QLabel("Intensité Glow:"))
+        glow_layout.addWidget(self.glow_slider)
+        glow_layout.addWidget(self.glow_label)
+        self.effect_widgets['glow_intensity'] = (glow_layout, self.glow_slider, self.glow_label)
+
+        # Vignette Radius
+        vignette_layout = QHBoxLayout()
+        self.vignette_slider = QSlider(Qt.Orientation.Horizontal)
+        self.vignette_slider.setRange(50, 1000)
+        self.vignette_slider.setValue(self.settings['vignette_radius'])
+        self.vignette_label = QLabel(f"{self.settings['vignette_radius']}px")
+        vignette_layout.addWidget(QLabel("Rayon Vignette:"))
+        vignette_layout.addWidget(self.vignette_slider)
+        vignette_layout.addWidget(self.vignette_label)
+        self.effect_widgets['vignette_radius'] = (vignette_layout, self.vignette_slider, self.vignette_label)
+
+        # Color Intensity
+        color_int_layout = QHBoxLayout()
+        self.color_int_slider = QSlider(Qt.Orientation.Horizontal)
+        self.color_int_slider.setRange(0, 100)
+        self.color_int_slider.setValue(self.settings['color_intensity'])
+        self.color_int_label = QLabel(f"{self.settings['color_intensity']}%")
+        color_int_layout.addWidget(QLabel("Intensité Couleur:"))
+        color_int_layout.addWidget(self.color_int_slider)
+        color_int_layout.addWidget(self.color_int_label)
+        self.effect_widgets['color_intensity'] = (color_int_layout, self.color_int_slider, self.color_int_label)
+
+        # Effect Color
+        color_layout = QHBoxLayout()
+        self.effect_color_btn = QPushButton("Choisir la couleur")
+        self.effect_color_btn.setStyleSheet(f"background-color: {self.settings['effect_color']};")
+        color_layout.addWidget(QLabel("Couleur d'effet:"))
+        color_layout.addWidget(self.effect_color_btn)
+        self.effect_widgets['effect_color'] = (color_layout, self.effect_color_btn, None)
+
+        # Zoom Intensity
+        zoom_layout = QHBoxLayout()
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setRange(0, 200)
+        self.zoom_slider.setValue(self.settings['zoom_intensity'])
+        self.zoom_label = QLabel(f"{self.settings['zoom_intensity']}%")
+        zoom_layout.addWidget(QLabel("Intensité Zoom:"))
+        zoom_layout.addWidget(self.zoom_slider)
+        zoom_layout.addWidget(self.zoom_label)
+        self.effect_widgets['zoom_intensity'] = (zoom_layout, self.zoom_slider, self.zoom_label)
+
+        # Blur Intensity
+        blur_layout = QHBoxLayout()
+        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
+        self.blur_slider.setRange(0, 100)
+        self.blur_slider.setValue(self.settings['blur_intensity'])
+        self.blur_label = QLabel(f"{self.settings['blur_intensity']}%")
+        blur_layout.addWidget(QLabel("Intensité Flou:"))
+        blur_layout.addWidget(self.blur_slider)
+        blur_layout.addWidget(self.blur_label)
+        self.effect_widgets['blur_intensity'] = (blur_layout, self.blur_slider, self.blur_label)
+
+    def update_effect_params(self):
+        """Met à jour les paramètres visibles selon l'effet sélectionné"""
+        # Effacer tous les widgets actuels
+        while self.effect_params_layout.count():
+            item = self.effect_params_layout.takeAt(0)
+            if item.widget():
+                item.widget().setVisible(False)
+            elif item.layout():
+                self._hide_layout(item.layout())
+
+        # Obtenir les paramètres requis pour l'effet actuel
+        effect_name = self.settings.get('effect', 'Spotlight Classic')
+        effect = EFFECTS_REGISTRY.get(effect_name)
+
+        if effect:
+            params = effect.get_parameters()
+            for param in params:
+                if param == 'shape':
+                    # La forme est déjà gérée par le groupe shape_group
+                    continue
+                elif param == 'brightness':
+                    # La luminosité est déjà gérée par le groupe bg_group
+                    continue
+                elif param in self.effect_widgets:
+                    layout, widget, label = self.effect_widgets[param]
+                    self.effect_params_layout.addLayout(layout)
+                    self._show_layout(layout)
+
+    def _hide_layout(self, layout):
+        """Cache tous les widgets d'un layout"""
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                item.widget().setVisible(False)
+            elif item.layout():
+                self._hide_layout(item.layout())
+
+    def _show_layout(self, layout):
+        """Affiche tous les widgets d'un layout"""
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                item.widget().setVisible(True)
+            elif item.layout():
+                self._show_layout(item.layout())
+
     def connect_signals(self):
         self.btn_load.clicked.connect(self.load_image)
         self.btn_export.clicked.connect(self.export_video)
@@ -691,16 +1186,48 @@ class MainWindow(QMainWindow):
         self.btn_prefs.clicked.connect(self.open_preferences)
         self.btn_preview.clicked.connect(self.toggle_preview_animation)
         self.btn_reset.clicked.connect(self.reset_path)
-        
+
         # Connexion des contrôles
         self.size_slider.valueChanged.connect(lambda v: self.update_setting("size", v))
         self.speed_slider.valueChanged.connect(lambda v: self.update_setting("speed", v))
         self.bg_slider.valueChanged.connect(lambda v: self.update_setting("brightness", v))
         self.shape_combo.currentTextChanged.connect(lambda t: self.update_setting("shape", t))
         self.fps_combo.currentTextChanged.connect(lambda t: self.update_setting("fps", int(t)))
-        
+        self.effect_combo.currentTextChanged.connect(lambda t: self.update_setting("effect", t))
+
         # Connexion du slider de lissage
         self.smoothing_slider.valueChanged.connect(self.update_smoothing)
+
+        # Connexion des paramètres d'effets
+        self.glow_slider.valueChanged.connect(lambda v: self.update_effect_param("glow_intensity", v))
+        self.vignette_slider.valueChanged.connect(lambda v: self.update_effect_param("vignette_radius", v))
+        self.color_int_slider.valueChanged.connect(lambda v: self.update_effect_param("color_intensity", v))
+        self.zoom_slider.valueChanged.connect(lambda v: self.update_effect_param("zoom_intensity", v))
+        self.blur_slider.valueChanged.connect(lambda v: self.update_effect_param("blur_intensity", v))
+        self.effect_color_btn.clicked.connect(self.pick_effect_color)
+
+    def update_effect_param(self, param_name, value):
+        """Met à jour un paramètre d'effet et son label"""
+        self.settings[param_name] = value
+
+        # Mettre à jour le label correspondant
+        if param_name == 'glow_intensity':
+            self.glow_label.setText(f"{value}%")
+        elif param_name == 'vignette_radius':
+            self.vignette_label.setText(f"{value}px")
+        elif param_name == 'color_intensity':
+            self.color_int_label.setText(f"{value}%")
+        elif param_name == 'zoom_intensity':
+            self.zoom_label.setText(f"{value}%")
+        elif param_name == 'blur_intensity':
+            self.blur_label.setText(f"{value}%")
+
+    def pick_effect_color(self):
+        """Ouvre un sélecteur de couleur pour l'effet"""
+        color = QColorDialog.getColor(QColor(self.settings['effect_color']), self)
+        if color.isValid():
+            self.settings['effect_color'] = color.name()
+            self.effect_color_btn.setStyleSheet(f"background-color: {color.name()};")
 
     def init_controls(self):
         self.size_slider.setRange(20, 500)
@@ -712,12 +1239,18 @@ class MainWindow(QMainWindow):
         self.update_all_labels()
         self.fps_combo.setCurrentText(str(self.settings['fps']))
         self.shape_combo.setCurrentText(self.settings.get('shape', 'Cercle'))
+        self.effect_combo.setCurrentText(self.settings.get('effect', 'Spotlight Classic'))
+        self.update_effect_params()  # Initialiser les paramètres d'effets visibles
 
     def update_setting(self, key, value):
         self.settings[key] = value
         self.update_all_labels()
-        if key == "shape": self.sync_scene_from_data()
-        if key == "brightness": self.update_brightness_overlay()
+        if key == "shape":
+            self.sync_scene_from_data()
+        if key == "brightness":
+            self.update_brightness_overlay()
+        if key == "effect":
+            self.update_effect_params()  # Mettre à jour les paramètres visibles quand l'effet change
         self.calculate_and_display_duration()
 
     def update_all_labels(self):
@@ -782,15 +1315,52 @@ class MainWindow(QMainWindow):
         if self.path_editor:
             self.path_editor.set_smoothing(value / 100.0)
     
+    def keyPressEvent(self, event):
+        """Gestion des raccourcis clavier"""
+        if event.key() == Qt.Key.Key_Z and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Ctrl+Z: Undo
+            if self.path_editor and self.path_editor.undo():
+                self.sync_path_from_editor()
+                self.status_label.setText("Annulation effectuée")
+        elif event.key() == Qt.Key.Key_Y and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Ctrl+Y: Redo
+            if self.path_editor and self.path_editor.redo():
+                self.sync_path_from_editor()
+                self.status_label.setText("Rétablissement effectué")
+        elif event.key() == Qt.Key.Key_Delete:
+            # Suppr: Supprimer le point sélectionné
+            if self.dragged_point:
+                index = self.dragged_point.index
+                if self.path_editor and self.path_editor.delete_point(index):
+                    self.sync_path_from_editor()
+                    self.status_label.setText(f"Point {index + 1} supprimé")
+                    self.dragged_point = None
+        elif event.key() == Qt.Key.Key_Space:
+            # Espace: Toggle preview
+            if self.btn_preview.isEnabled():
+                self.toggle_preview_animation()
+        else:
+            super().keyPressEvent(event)
+
     def view_mouse_press(self, event):
         if not self.path_editor:
             return
-            
+
         scene_pos = self.view.mapToScene(event.pos())
-        
+
+        # Vérifier si c'est un clic droit
+        if event.button() == Qt.MouseButton.RightButton:
+            # Clic droit: Supprimer un point
+            point_index = self.path_editor.find_point_at(scene_pos)
+            if point_index >= 0:
+                if self.path_editor.delete_point(point_index):
+                    self.sync_path_from_editor()
+                    self.status_label.setText(f"Point {point_index + 1} supprimé")
+            return
+
         # Vérifier si on est en mode édition (Maj enfoncé)
         shift_pressed = (QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier) == Qt.KeyboardModifier.ShiftModifier
-        
+
         if shift_pressed:
             # Mode édition - on laisse gérer le déplacement des points par Qt
             item = self.scene.itemAt(scene_pos, self.view.transform())
@@ -801,7 +1371,7 @@ class MainWindow(QMainWindow):
             # Mode ajout de point
             if self.cv_image is None:
                 return
-                
+
             # Ajout d'un point avec l'éditeur de chemin
             self.path_editor.add_point(scene_pos, self.settings['size'])
             self.sync_path_from_editor()
