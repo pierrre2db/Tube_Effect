@@ -8,11 +8,18 @@ Une application Python pour créer des animations vidéo avec un effet de projec
 
 - 🖼️ Chargement d'images (PNG, JPG, BMP)
 - ✏️ Édition intuitive du tracé avec support des courbes de Bézier
+- 🎨 **Effets multiples** :
+  - **Projecteur** : Zone éclairée sur fond sombre
+  - **Lentille** : Effet de loupe/zoom sur la zone
+  - **Projecteur + Lentille** : Combinaison des deux effets
 - 🎚️ Paramètres personnalisables :
   - Forme (Cercle/Carré)
-  - Taille du projecteur
+  - Type d'effet visuel
+  - Taille du projecteur/lentille
+  - Intensité du zoom (100-300%)
   - Vitesse de déplacement
   - Luminosité du fond
+  - Lissage du tracé
 - 🎥 Export vidéo en haute qualité (jusqu'à 4K)
 - ⚡ Prévisualisation en temps réel
 

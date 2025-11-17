@@ -288,7 +288,9 @@ DEFAULT_SETTINGS = {
     "fps": 50,
     "shape": "Cercle",
     "trace_color": "#FFFF00",
-    "shape_color": "#00FFFF"
+    "shape_color": "#00FFFF",
+    "effect": "Projecteur",
+    "lens_zoom": 150  # Pourcentage de zoom pour l'effet lentille (100-300%)
 }
 
 # =============================================================================
@@ -446,34 +448,139 @@ class AnimationWorker(QThread):
     def create_highlight_frame(self, dark_image, x, y, size):
         """
         Crée une frame avec une zone mise en évidence.
-        
+
         Args:
             dark_image: Image de fond assombrie
             x, y: Position du centre de la zone
             size: Taille de la zone
-            
+
         Returns:
             Image avec la zone mise en évidence
         """
+        effect = self.settings.get('effect', 'Projecteur')
+
+        if effect == "Lentille":
+            return self.create_lens_effect(dark_image, x, y, size)
+        elif effect == "Projecteur + Lentille":
+            return self.create_spotlight_lens_effect(dark_image, x, y, size)
+        else:  # Projecteur par défaut
+            return self.create_spotlight_effect(dark_image, x, y, size)
+
+    def create_spotlight_effect(self, dark_image, x, y, size):
+        """
+        Crée l'effet de projecteur classique (zone éclairée sur fond sombre).
+
+        Args:
+            dark_image: Image de fond assombrie
+            x, y: Position du centre de la zone
+            size: Taille de la zone
+
+        Returns:
+            Image avec l'effet de projecteur
+        """
         # Création d'un masque pour la zone éclairée
         mask = np.zeros(self.image.shape[:2], dtype="uint8")
-        
+
         # Dessin de la forme sélectionnée dans le masque
         if self.settings['shape'] == "Cercle":
             cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
         elif self.settings['shape'] == "Carré":
             half_size = int(size / 2)
             cv2.rectangle(
-                mask, 
-                (int(x - half_size), int(y - half_size)), 
-                (int(x + half_size), int(y + half_size)), 
-                255, 
+                mask,
+                (int(x - half_size), int(y - half_size)),
+                (int(x + half_size), int(y + half_size)),
+                255,
                 -1
             )
-        
+
         # Application du masque pour combiner les images
         mask_3d = mask[:, :, np.newaxis] > 0
         return np.where(mask_3d, self.image, dark_image)
+
+    def create_lens_effect(self, dark_image, x, y, size):
+        """
+        Crée l'effet de lentille/loupe (zoom sur la zone).
+
+        Args:
+            dark_image: Image de fond assombrie
+            x, y: Position du centre de la zone
+            size: Taille de la zone
+
+        Returns:
+            Image avec l'effet de lentille
+        """
+        result = dark_image.copy()
+        height, width = self.image.shape[:2]
+
+        # Récupération du facteur de zoom
+        zoom_factor = self.settings.get('lens_zoom', 150) / 100.0
+
+        # Calcul de la zone à extraire pour le zoom
+        half_size = int(size / 2)
+
+        # Zone source (plus petite pour créer l'effet de zoom)
+        src_half_size = int(half_size / zoom_factor)
+        src_x1 = max(0, int(x - src_half_size))
+        src_y1 = max(0, int(y - src_half_size))
+        src_x2 = min(width, int(x + src_half_size))
+        src_y2 = min(height, int(y + src_half_size))
+
+        # Extraction et redimensionnement de la zone
+        if src_x2 > src_x1 and src_y2 > src_y1:
+            zoomed_region = self.image[src_y1:src_y2, src_x1:src_x2]
+
+            # Redimensionner pour créer l'effet de zoom
+            target_size = (int(half_size * 2), int(half_size * 2))
+            if zoomed_region.size > 0:
+                zoomed_region = cv2.resize(zoomed_region, target_size, interpolation=cv2.INTER_LINEAR)
+
+                # Zone de destination
+                dst_x1 = max(0, int(x - half_size))
+                dst_y1 = max(0, int(y - half_size))
+                dst_x2 = min(width, int(x + half_size))
+                dst_y2 = min(height, int(y + half_size))
+
+                # Ajustement si on est près des bords
+                actual_h = dst_y2 - dst_y1
+                actual_w = dst_x2 - dst_x1
+
+                if actual_h > 0 and actual_w > 0:
+                    zoomed_region = cv2.resize(zoomed_region, (actual_w, actual_h), interpolation=cv2.INTER_LINEAR)
+
+                    # Création du masque pour la forme
+                    mask = np.zeros(result.shape[:2], dtype="uint8")
+                    if self.settings['shape'] == "Cercle":
+                        cv2.circle(mask, (int(x), int(y)), int(size / 2), 255, -1)
+                    else:
+                        cv2.rectangle(mask, (dst_x1, dst_y1), (dst_x2, dst_y2), 255, -1)
+
+                    # Application de la région zoomée avec le masque
+                    mask_roi = mask[dst_y1:dst_y2, dst_x1:dst_x2]
+                    mask_3d = mask_roi[:, :, np.newaxis] > 0
+                    result[dst_y1:dst_y2, dst_x1:dst_x2] = np.where(
+                        mask_3d,
+                        zoomed_region,
+                        result[dst_y1:dst_y2, dst_x1:dst_x2]
+                    )
+
+        return result
+
+    def create_spotlight_lens_effect(self, dark_image, x, y, size):
+        """
+        Combine l'effet de projecteur et de lentille.
+
+        Args:
+            dark_image: Image de fond assombrie
+            x, y: Position du centre de la zone
+            size: Taille de la zone
+
+        Returns:
+            Image avec l'effet combiné
+        """
+        # D'abord créer l'effet de lentille sur l'image complète
+        lens_result = self.create_lens_effect(dark_image, x, y, size)
+        return lens_result
         
     def calculate_distance(self, p1, p2):
         """
@@ -524,7 +631,7 @@ class PreferencesDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Créateur d'Animation Vidéo v1.9")
+        self.setWindowTitle("Créateur d'Animation Vidéo v2.1 - Tube Effect")
         self.setGeometry(100, 100, 1400, 900)
         
         self.settings = DEFAULT_SETTINGS.copy()
@@ -579,7 +686,27 @@ class MainWindow(QMainWindow):
         self.shape_combo.addItems(["Cercle", "Carré"])
         shape_layout.addWidget(self.shape_combo)
         shape_group.setLayout(shape_layout)
-        
+
+        # Groupe pour l'effet
+        effect_group = QGroupBox("Effet")
+        effect_layout = QVBoxLayout()
+        self.effect_combo = QComboBox()
+        self.effect_combo.addItems(["Projecteur", "Lentille", "Projecteur + Lentille"])
+        self.effect_combo.setCurrentText(self.settings.get('effect', 'Projecteur'))
+        effect_layout.addWidget(self.effect_combo)
+        effect_group.setLayout(effect_layout)
+
+        # Groupe pour le zoom de la lentille
+        lens_zoom_group = QGroupBox("Zoom Lentille")
+        lens_zoom_layout = QVBoxLayout()
+        self.lens_zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.lens_zoom_slider.setRange(100, 300)
+        self.lens_zoom_slider.setValue(self.settings.get('lens_zoom', 150))
+        self.lens_zoom_label = QLabel(f"Zoom ({self.settings.get('lens_zoom', 150)}%):")
+        lens_zoom_layout.addWidget(self.lens_zoom_label)
+        lens_zoom_layout.addWidget(self.lens_zoom_slider)
+        lens_zoom_group.setLayout(lens_zoom_layout)
+
         # Groupe pour la taille
         size_group = QGroupBox("Taille")
         size_layout = QVBoxLayout()
@@ -654,6 +781,8 @@ class MainWindow(QMainWindow):
         
         # Ajout des groupes aux contrôles
         controls_layout.addWidget(shape_group)
+        controls_layout.addWidget(effect_group)
+        controls_layout.addWidget(lens_zoom_group)
         controls_layout.addWidget(size_group)
         controls_layout.addWidget(bg_group)
         controls_layout.addWidget(speed_group)
@@ -698,7 +827,9 @@ class MainWindow(QMainWindow):
         self.bg_slider.valueChanged.connect(lambda v: self.update_setting("brightness", v))
         self.shape_combo.currentTextChanged.connect(lambda t: self.update_setting("shape", t))
         self.fps_combo.currentTextChanged.connect(lambda t: self.update_setting("fps", int(t)))
-        
+        self.effect_combo.currentTextChanged.connect(lambda t: self.update_setting("effect", t))
+        self.lens_zoom_slider.valueChanged.connect(lambda v: self.update_setting("lens_zoom", v))
+
         # Connexion du slider de lissage
         self.smoothing_slider.valueChanged.connect(self.update_smoothing)
 
@@ -712,6 +843,8 @@ class MainWindow(QMainWindow):
         self.update_all_labels()
         self.fps_combo.setCurrentText(str(self.settings['fps']))
         self.shape_combo.setCurrentText(self.settings.get('shape', 'Cercle'))
+        self.effect_combo.setCurrentText(self.settings.get('effect', 'Projecteur'))
+        self.lens_zoom_slider.setValue(self.settings.get('lens_zoom', 150))
 
     def update_setting(self, key, value):
         self.settings[key] = value
@@ -724,6 +857,7 @@ class MainWindow(QMainWindow):
         self.size_label.setText(f"Taille ({self.settings['size']}px):")
         self.bg_label.setText(f"Luminosité ({self.settings['brightness']}%):")
         self.speed_label.setText(f"Vitesse ({self.settings['speed']} px/s):")
+        self.lens_zoom_label.setText(f"Zoom ({self.settings.get('lens_zoom', 150)}%):")
     
     def open_preferences(self):
         dialog = PreferencesDialog(self.settings, self)
@@ -934,7 +1068,7 @@ class MainWindow(QMainWindow):
     def update_button_states(self, is_previewing=False):
         has_image = self.cv_image is not None
         has_path = len(self.path_points) >= 2
-        for widget in [self.btn_load, self.btn_export, self.btn_reset, self.size_slider, self.speed_slider, self.shape_combo, self.bg_slider, self.btn_save_path, self.btn_load_path, self.btn_prefs, self.export_profile_combo, self.fps_combo]:
+        for widget in [self.btn_load, self.btn_export, self.btn_reset, self.size_slider, self.speed_slider, self.shape_combo, self.effect_combo, self.lens_zoom_slider, self.bg_slider, self.btn_save_path, self.btn_load_path, self.btn_prefs, self.export_profile_combo, self.fps_combo]:
             widget.setEnabled(not is_previewing)
         if not is_previewing:
             self.btn_export.setEnabled(has_image and has_path)

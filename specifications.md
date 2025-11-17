@@ -16,14 +16,18 @@ Ce document définit les spécifications techniques et fonctionnelles du logicie
 - [x] Édition de trajet (FP-02)
 - [x] Paramétrage de l'animation (FP-03)
 - [x] Exportation vidéo (FP-05)
+- [x] Effets visuels multiples (FP-07)
+- [x] Effet de lentille/loupe (FP-08)
 - [ ] Prévisualisation en temps réel (FP-04)
 - [ ] Gestion des préférences utilisateur (FP-06)
 
 ### 1.3. Glossaire
 - **Point de Contrôle** : Point éditable sur la scène (position x,y + taille)
-- **Effet Tube** : Zone éclairée se déplaçant sur un fond assombri
+- **Effet Projecteur** : Zone éclairée se déplaçant sur un fond assombri
+- **Effet Lentille** : Zone avec effet de loupe/zoom magnifiant le contenu
 - **Scène** : Zone d'affichage principale de l'image et du tracé
 - **Profil d'Export** : Paramètres prédéfinis pour la résolution vidéo
+- **Facteur de Zoom** : Intensité de l'agrandissement pour l'effet lentille (100-300%)
 
 ---
 
@@ -87,9 +91,12 @@ Tube_Effect/
 
 ### 4.2. Panneau de Contrôle
 - **Forme** : Cercle/Carré
+- **Effet** : Projecteur/Lentille/Projecteur + Lentille
+- **Zoom Lentille** : 100-300%
 - **Taille** : 20-500px
 - **Vitesse** : 20-1000 px/s
 - **Luminosité** : 0-100%
+- **Lissage** : 0-100%
 - **FPS** : 15/24/25/30/50/60
 
 ### 4.3. Zone de Visualisation
@@ -143,8 +150,10 @@ numpy>=1.24.0
 
 ### 8.2. Améliorations Futures
 - Support des calques
-- Effets supplémentaires
+- Effets supplémentaires (flou, distorsion, etc.)
 - Export GIF
+- Effet de lentille avec distorsion fisheye
+- Prévisualisation temps réel optimisée
 
 ---
 
@@ -155,6 +164,7 @@ numpy>=1.24.0
 | 1.0     | 10/06/2025 | Version initiale                |
 | 1.1     | 12/06/2025 | Ajout du lissage des courbes    |
 | 2.0     | 13/06/2025 | Refonte complète de l'interface |
+| 2.1     | 17/11/2025 | Ajout des effets de lentille/loupe avec zoom configurable (100-300%) |
 
 ---
 
