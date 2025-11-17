@@ -47,10 +47,27 @@ Une application Python pour créer des animations vidéo avec un effet de projec
 
 ## 🎮 Utilisation
 
-1. Lancez l'application :
-   ```bash
-   python Tube_Effect_1.2.py
-   ```
+### 🚀 Démarrage rapide
+
+**Linux / Mac :**
+```bash
+./start.sh
+```
+
+**Windows :**
+```batch
+start.bat
+```
+
+**Ou manuellement :**
+```bash
+python Tube_Effect_1.2.py
+```
+
+Les scripts de lancement vérifient automatiquement :
+- ✓ Présence de Python
+- ✓ Installation des dépendances
+- ✓ Démarrage de l'application
 
 2. **Chargez une image** : Cliquez sur "📁 Charger Image"
    - Un message d'aide s'affichera automatiquement au premier lancement
