@@ -2,6 +2,44 @@
 
 Toutes les modifications notables de ce projet seront documentées dans ce fichier.
 
+## [2.1.0] - 2026-06-12
+
+### 🐛 Corrections de Bugs Critiques
+
+- **Correction indexation poignées Bézier** : Affichage correct des courbes de contrôle - bug majeur corrigé dans `_draw_bezier_handles()`
+- **Validation chargement image** : Détection des fichiers corrompus ou invalides avec message d'erreur approprié
+- **Gestion robuste des codecs vidéo** : Fallback automatique entre X264, avc1, mp4v, XVID si codec préféré indisponible
+- **Arrêt propre des threads** : Ajout de `wait()` pour éviter les fuites mémoire lors de l'annulation d'animations
+- **Validation données projet** : Vérification complète de la structure JSON lors du chargement de fichiers
+
+### ✨ Nouvelles Fonctionnalités
+
+- **Suppression de points individuels** : Supprimer un point du tracé avec la touche Delete ou Backspace (survol le point et appuyer sur Delete)
+- **Raccourcis clavier** : Ctrl+S (sauvegarder projet), Ctrl+O (ouvrir projet)
+- **Messages de feedback améliorés** : Confirmation après sauvegarde et export réussis, messages d'erreur plus clairs
+- **Tooltips complets** : Aide contextuelle sur tous les contrôles de l'interface
+- **Status bar active** : Affichage de l'état actuel et des actions en cours
+
+### 🎨 Améliorations de l'Interface
+
+- **Format de durée amélioré** : Affichage MM:SS.CS au lieu de MM:SS:FF (centisecondes plus lisibles)
+- **Messages d'erreur détaillés** : Erreurs plus claires et informatives avec détails spécifiques
+- **Gestion erreurs sauvegarde** : Validation et messages d'erreur lors de la sauvegarde de projets
+
+### ⚡ Optimisations
+
+- **Rendu PathEditor optimisé** : Utilisation d'une liste `path_items` pour suppression rapide des éléments graphiques au lieu de parcourir toute la scène
+- **Validation des entrées** : Prévention des valeurs invalides lors du chargement de données
+- **Gestion mémoire améliorée** : Nettoyage approprié des ressources graphiques
+
+### 🔧 Corrections Mineures
+
+- **Correction du double division** : Bug dans `update_smoothing()` causant un lissage incorrect
+- **Mise à jour numéro de version** : Titre de la fenêtre affiche correctement "Tube Effect v2.1.0"
+- **Extension fichiers automatique** : Ajout automatique de `.json` et `.mp4` si omis lors de la sauvegarde
+
+---
+
 ## [2.0.0] - 2025-11-05
 
 ### 🎉 Système d'Effets Multiples
