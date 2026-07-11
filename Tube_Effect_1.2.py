@@ -25,7 +25,7 @@ class PathEditor:
     def __init__(self, scene):
         """
         Initialise l'éditeur de chemin.
-        
+
         Args:
             scene: La scène QGraphicsScene où le chemin sera affiché
         """
@@ -34,6 +34,7 @@ class PathEditor:
         self.bezier_handles = []     # Poignées de Bézier pour les courbes
         self.smoothing = 0.5         # Niveau de lissage (0.0 à 1.0)
         self.show_handles = True     # Afficher les poignées de contrôle
+        self.path_items = []         # Liste des items graphiques du chemin pour suppression rapide
         
     def add_point(self, pos, size):
         """
@@ -148,23 +149,25 @@ class PathEditor:
         Redessine l'ensemble du chemin et ses éléments de contrôle dans la scène.
         Cette méthode est appelée à chaque modification du chemin.
         """
-        # Supprime tous les éléments graphiques précédents du chemin
-        for item in self.scene.items():
-            if hasattr(item, 'is_path_element') and item.is_path_element:
+        # Supprime tous les éléments graphiques précédents du chemin (optimisé)
+        for item in self.path_items:
+            if item.scene() == self.scene:
                 self.scene.removeItem(item)
+        self.path_items.clear()
         
         # Vérifie s'il y a assez de points pour former un chemin
         if len(self.points) >= 2:
             # Création du style pour le chemin principal
             pen = QPen(QColor("#4f46e5"), 2, Qt.PenStyle.SolidLine)
-            
+
             # Obtention du chemin lissé
             path = self.get_smoothed_path()
-            
+
             # Ajout du chemin à la scène
             path_item = self.scene.addPath(path, pen)
             path_item.is_path_element = True  # Marque l'élément pour une suppression facile
-            
+            self.path_items.append(path_item)
+
             # Dessin des points de contrôle
             for i, point in enumerate(self.points):
                 # Dessin du point principal
@@ -178,24 +181,25 @@ class PathEditor:
                 )
                 point_item.is_path_element = True
                 point_item.setZValue(15)  # S'assure que les points sont au-dessus du chemin
-                
+                self.path_items.append(point_item)
+
                 # Dessin des poignées de Bézier si activé et pour les points intermédiaires
-                if (self.show_handles and 
-                    0 < i < len(self.points) - 1 and 
-                    i-1 < len(self.bezier_handles)):
-                    
+                if (self.show_handles and
+                    0 < i < len(self.points) - 1 and
+                    i < len(self.bezier_handles)):
+
                     self._draw_bezier_handles(i, point)
     
     def _draw_bezier_handles(self, point_index, point):
         """
         Dessine les poignées de Bézier pour un point de contrôle.
-        
+
         Args:
             point_index: Index du point de contrôle
             point: Dictionnaire contenant les coordonnées du point
         """
-        handle_in = self.bezier_handles[point_index-1]["in"]
-        handle_out = self.bezier_handles[point_index-1]["out"]
+        handle_in = self.bezier_handles[point_index]["in"]
+        handle_out = self.bezier_handles[point_index]["out"]
         
         if not handle_in or not handle_out:
             return
@@ -210,7 +214,8 @@ class PathEditor:
             line_pen
         )
         line_in.is_path_element = True
-        
+        self.path_items.append(line_in)
+
         # Ligne point de contrôle -> poignée de sortie
         line_out = self.scene.addLine(
             point["x"], point["y"],
@@ -218,11 +223,12 @@ class PathEditor:
             line_pen
         )
         line_out.is_path_element = True
-        
+        self.path_items.append(line_out)
+
         # Style des poignées
         handle_size = 6
         handle_brush = QBrush(QColor("#ef4444"))  # Couleur rouge pour les poignées
-        
+
         # Dessin de la poignée d'entrée
         handle_in_item = self.scene.addEllipse(
             handle_in["x"] - handle_size/2,
@@ -233,7 +239,8 @@ class PathEditor:
         )
         handle_in_item.is_path_element = True
         handle_in_item.setZValue(15)
-        
+        self.path_items.append(handle_in_item)
+
         # Dessin de la poignée de sortie
         handle_out_item = self.scene.addEllipse(
             handle_out["x"] - handle_size/2,
@@ -244,6 +251,7 @@ class PathEditor:
         )
         handle_out_item.is_path_element = True
         handle_out_item.setZValue(15)
+        self.path_items.append(handle_out_item)
     
     def set_smoothing(self, value):
         """
@@ -265,6 +273,23 @@ class PathEditor:
         """
         return self.points
     
+    def delete_point(self, index):
+        """
+        Supprime un point de contrôle du chemin.
+
+        Args:
+            index: Index du point à supprimer
+
+        Returns:
+            bool: True si le point a été supprimé, False sinon
+        """
+        if 0 <= index < len(self.points):
+            self.points.pop(index)
+            self.update_bezier_handles()
+            self.redraw()
+            return True
+        return False
+
     def clear(self):
         """
         Réinitialise l'éditeur en supprimant tous les points de contrôle.
@@ -367,11 +392,25 @@ class AnimationWorker(QThread):
             video_writer = None
             if self.output_path:
                 out_w, out_h = self.target_resolution if self.target_resolution else (width, height)
-                # Utilisation de l'encodeur H.264 (X264) pour une meilleure qualité
-                fourcc = cv2.VideoWriter_fourcc(*'X264')
-                video_writer = cv2.VideoWriter(self.output_path, fourcc, fps, (out_w, out_h))
-                if not video_writer.isOpened():
-                    raise RuntimeError(f"Impossible d'initialiser le fichier vidéo: {self.output_path}")
+
+                # Essai de plusieurs codecs par ordre de préférence
+                codecs_to_try = ['X264', 'avc1', 'mp4v', 'XVID']
+                video_writer_initialized = False
+
+                for codec_name in codecs_to_try:
+                    try:
+                        fourcc = cv2.VideoWriter_fourcc(*codec_name)
+                        video_writer = cv2.VideoWriter(self.output_path, fourcc, fps, (out_w, out_h))
+                        if video_writer.isOpened():
+                            video_writer_initialized = True
+                            break
+                        else:
+                            video_writer.release()
+                    except:
+                        continue
+
+                if not video_writer_initialized:
+                    raise RuntimeError(f"Impossible d'initialiser le fichier vidéo avec aucun codec disponible. Codecs essayés: {', '.join(codecs_to_try)}")
 
             # Vérification des paramètres valides
             if speed <= 0 or fps <= 0:
@@ -524,9 +563,9 @@ class PreferencesDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Créateur d'Animation Vidéo v1.9")
+        self.setWindowTitle("Tube Effect v2.1.0")
         self.setGeometry(100, 100, 1400, 900)
-        
+
         self.settings = DEFAULT_SETTINGS.copy()
         self.image_path, self.cv_image = None, None
         self.path_points = []
@@ -536,6 +575,7 @@ class MainWindow(QMainWindow):
         self.overlay_item = None
         self.hovered_point_index = None
         self.path_editor = None
+        self.selected_point_index = None
         self.init_ui()
     
     def init_ui(self):
@@ -550,9 +590,16 @@ class MainWindow(QMainWindow):
         
         # Boutons de contrôle
         self.btn_load = QPushButton("Charger une image")
+        self.btn_load.setToolTip("Charger une image (PNG, JPG, BMP)")
+
         self.btn_save_path = QPushButton("Sauvegarder le tracé")
+        self.btn_save_path.setToolTip("Sauvegarder le projet (Ctrl+S)")
+
         self.btn_load_path = QPushButton("Charger un tracé")
+        self.btn_load_path.setToolTip("Charger un projet existant (Ctrl+O)")
+
         self.btn_prefs = QPushButton("Préférences")
+        self.btn_prefs.setToolTip("Personnaliser les couleurs")
         
         # Ajout des boutons à la barre supérieure
         top_bar.addWidget(self.btn_load)
@@ -577,42 +624,47 @@ class MainWindow(QMainWindow):
         shape_layout = QVBoxLayout()
         self.shape_combo = QComboBox()
         self.shape_combo.addItems(["Cercle", "Carré"])
+        self.shape_combo.setToolTip("Choisir la forme du projecteur")
         shape_layout.addWidget(self.shape_combo)
         shape_group.setLayout(shape_layout)
-        
+
         # Groupe pour la taille
         size_group = QGroupBox("Taille")
         size_layout = QVBoxLayout()
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.size_slider.setToolTip("Ajuster la taille du projecteur (20-500px)")
         self.size_label = QLabel(f"Taille ({self.settings['size']}px):")
         size_layout.addWidget(self.size_label)
         size_layout.addWidget(self.size_slider)
         size_group.setLayout(size_layout)
-        
+
         # Groupe pour la luminosité
         bg_group = QGroupBox("Luminosité")
         bg_layout = QVBoxLayout()
         self.bg_slider = QSlider(Qt.Orientation.Horizontal)
+        self.bg_slider.setToolTip("Ajuster la luminosité de l'arrière-plan (0-100%)")
         self.bg_label = QLabel(f"Luminosité ({self.settings['brightness']}%):")
         bg_layout.addWidget(self.bg_label)
         bg_layout.addWidget(self.bg_slider)
         bg_group.setLayout(bg_layout)
-        
+
         # Groupe pour la vitesse
         speed_group = QGroupBox("Vitesse")
         speed_layout = QVBoxLayout()
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self.speed_slider.setToolTip("Vitesse de déplacement du projecteur (20-1000 px/s)")
         self.speed_label = QLabel(f"Vitesse ({self.settings['speed']} px/s):")
         speed_layout.addWidget(self.speed_label)
         speed_layout.addWidget(self.speed_slider)
         speed_group.setLayout(speed_layout)
-        
+
         # Groupe pour les FPS
         fps_group = QGroupBox("FPS")
         fps_layout = QVBoxLayout()
         self.fps_combo = QComboBox()
         self.fps_combo.addItems(["15", "24", "25", "30", "50", "60"])
         self.fps_combo.setCurrentText(str(self.settings['fps']))
+        self.fps_combo.setToolTip("Images par seconde pour l'animation")
         fps_layout.addWidget(self.fps_combo)
         fps_group.setLayout(fps_layout)
         
@@ -622,33 +674,41 @@ class MainWindow(QMainWindow):
         self.smoothing_slider = QSlider(Qt.Orientation.Horizontal)
         self.smoothing_slider.setRange(0, 100)
         self.smoothing_slider.setValue(50)
+        self.smoothing_slider.setToolTip("Intensité du lissage des courbes de Bézier")
         self.smoothing_label = QLabel("50%")
         smoothing_layout.addWidget(QLabel("Lissage:"))
         smoothing_layout.addWidget(self.smoothing_slider)
         smoothing_layout.addWidget(self.smoothing_label)
         self.smoothing_group.setLayout(smoothing_layout)
-        
+
         # Groupe pour les options d'exportation
         export_group = QGroupBox("Exportation")
         export_layout = QVBoxLayout()
-        
+
         # Sélection du profil d'exportation
         profile_layout = QHBoxLayout()
         profile_layout.addWidget(QLabel("Profil:"))
         self.export_profile_combo = QComboBox()
         self.export_profile_combo.addItems(["HD 720p", "Full HD 1080p", "4K UHD"])
+        self.export_profile_combo.setToolTip("Résolution de la vidéo exportée")
         profile_layout.addWidget(self.export_profile_combo)
         export_layout.addLayout(profile_layout)
-        
+
         # Boutons d'action
         action_layout = QVBoxLayout()
         self.btn_preview = QPushButton("Prévisualiser")
+        self.btn_preview.setToolTip("Prévisualiser l'animation (nécessite une image et un tracé)")
+
         self.btn_export = QPushButton("Exporter")
+        self.btn_export.setToolTip("Exporter l'animation en vidéo MP4")
+
         self.btn_reset = QPushButton("Réinitialiser")
+        self.btn_reset.setToolTip("Supprimer tous les points et recommencer le tracé")
+
         action_layout.addWidget(self.btn_preview)
         action_layout.addWidget(self.btn_export)
         action_layout.addWidget(self.btn_reset)
-        
+
         export_layout.addLayout(action_layout)
         export_group.setLayout(export_layout)
         
@@ -683,6 +743,33 @@ class MainWindow(QMainWindow):
         # Initialisation des contrôles
         self.init_controls()
         self.update_button_states()
+
+    def keyPressEvent(self, event):
+        """Gestion des événements clavier pour les raccourcis"""
+        from PyQt6.QtGui import QKeySequence
+
+        # Supprimer le point survolé avec Delete/Suppr
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if self.hovered_point_index is not None and self.path_editor:
+                if self.path_editor.delete_point(self.hovered_point_index):
+                    self.sync_path_from_editor()
+                    self.hovered_point_index = None
+                    self.status_label.setText("Point supprimé")
+            return
+
+        # Ctrl+S : Sauvegarder
+        if event.matches(QKeySequence.StandardKey.Save):
+            self.save_path()
+            return
+
+        # Ctrl+O : Ouvrir
+        if event.matches(QKeySequence.StandardKey.Open):
+            self.load_path()
+            return
+
+        # Passer l'événement au parent si non géré
+        super().keyPressEvent(event)
+
     def connect_signals(self):
         self.btn_load.clicked.connect(self.load_image)
         self.btn_export.clicked.connect(self.export_video)
@@ -734,7 +821,11 @@ class MainWindow(QMainWindow):
     def load_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Ouvrir une image", "", "Images (*.png *.jpg *.bmp)")
         if path:
-            self.image_path, self.cv_image = path, cv2.imread(path)
+            self.cv_image = cv2.imread(path)
+            if self.cv_image is None:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger l'image. Le fichier est peut-être corrompu ou dans un format non supporté.")
+                return
+            self.image_path = path
             pixmap = QPixmap(self.image_path)
             self.scene.clear()
             self.scene.addPixmap(pixmap)
@@ -758,29 +849,64 @@ class MainWindow(QMainWindow):
             self.overlay_item.setBrush(QColor(0, 0, 0, alpha))
 
     def save_path(self):
-        if not self.path_points: return
+        if not self.path_points:
+            QMessageBox.warning(self, "Attention", "Aucun tracé à sauvegarder.")
+            return
         path, _ = QFileDialog.getSaveFileName(self, "Sauvegarder le projet", "", "Projet Vidéo (*.json)")
         if path:
-            with open(path, 'w') as f: json.dump({"settings": self.settings, "path_points": self.path_points}, f, indent=4)
+            try:
+                if not path.endswith('.json'):
+                    path += '.json'
+                with open(path, 'w') as f:
+                    json.dump({"settings": self.settings, "path_points": self.path_points}, f, indent=4)
+                self.status_label.setText(f"Projet sauvegardé: {path.split('/')[-1]}")
+                QMessageBox.information(self, "Succès", "Le projet a été sauvegardé avec succès.")
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Impossible de sauvegarder le projet:\n{str(e)}")
 
     def load_path(self):
-        if self.cv_image is None: return
+        if self.cv_image is None:
+            QMessageBox.warning(self, "Attention", "Veuillez d'abord charger une image avant de charger un projet.")
+            return
         path, _ = QFileDialog.getOpenFileName(self, "Charger un projet", "", "Projet Vidéo (*.json)")
         if path:
             try:
-                with open(path, 'r') as f: project_data = json.load(f)
-                self.settings = project_data.get("settings", DEFAULT_SETTINGS.copy())
-                self.path_points = project_data.get("path_points", [])
+                with open(path, 'r') as f:
+                    project_data = json.load(f)
+
+                if not isinstance(project_data, dict):
+                    raise ValueError("Format de fichier invalide")
+
+                settings = project_data.get("settings", DEFAULT_SETTINGS.copy())
+                if not isinstance(settings, dict):
+                    raise ValueError("Paramètres invalides dans le fichier")
+
+                path_points = project_data.get("path_points", [])
+                if not isinstance(path_points, list):
+                    raise ValueError("Points de tracé invalides")
+
+                for point in path_points:
+                    if not isinstance(point, dict) or 'x' not in point or 'y' not in point or 'size' not in point:
+                        raise ValueError("Format de point invalide")
+
+                self.settings = settings
+                self.path_points = path_points
                 self.init_controls()
                 self.sync_scene_from_data()
+                self.status_label.setText(f"Projet chargé: {path.split('/')[-1]}")
+
+            except json.JSONDecodeError:
+                QMessageBox.critical(self, "Erreur", "Le fichier n'est pas un fichier JSON valide.")
+            except ValueError as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur de validation: {str(e)}")
             except Exception as e:
-                print(f"Erreur lors du chargement du fichier projet : {e}")
+                QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement du fichier projet:\n{str(e)}")
 
     def update_smoothing(self, value):
         """Met à jour le niveau de lissage du chemin"""
         self.smoothing_label.setText(f"{value}%")
         if self.path_editor:
-            self.path_editor.set_smoothing(value / 100.0)
+            self.path_editor.set_smoothing(value)
     
     def view_mouse_press(self, event):
         if not self.path_editor:
@@ -915,18 +1041,21 @@ class MainWindow(QMainWindow):
         fps = self.settings['fps']
         speed = self.settings['speed']
         if len(self.path_points) < 2 or speed <= 0 or fps <= 0:
-            self.duration_label.setText("Durée: 00:00:00"); return
-        
+            self.duration_label.setText("Durée: 00:00.00"); return
+
         total_distance = self.calculate_total_distance()
         total_seconds = total_distance / speed
-        
+
         total_frames = int(total_seconds * fps)
         total_seconds_from_frames = total_frames // fps
         remaining_frames = total_frames % fps
         minutes = total_seconds_from_frames // 60
         seconds = total_seconds_from_frames % 60
-        
-        self.duration_label.setText(f"Durée: {minutes:02d}:{seconds:02d}:{remaining_frames:02d}")
+
+        # Conversion des frames en centièmes de seconde pour un affichage plus clair
+        centiseconds = int((remaining_frames / fps) * 100)
+
+        self.duration_label.setText(f"Durée: {minutes:02d}:{seconds:02d}.{centiseconds:02d}")
 
     def calculate_total_distance(self):
         return sum(math.sqrt((self.path_points[i+1]["x"] - self.path_points[i]["x"])**2 + (self.path_points[i+1]["y"] - self.path_points[i]["y"])**2) for i in range(len(self.path_points) - 1))
@@ -951,7 +1080,9 @@ class MainWindow(QMainWindow):
         self.sync_scene_from_data()
 
     def toggle_preview_animation(self):
-        if self.preview_worker and self.preview_worker.isRunning(): self.preview_worker.stop()
+        if self.preview_worker and self.preview_worker.isRunning():
+            self.preview_worker.stop()
+            self.preview_worker.wait()  # Attendre que le thread se termine proprement
         else:
             if not (self.cv_image is not None and len(self.path_points) >= 2): return
             self.btn_preview.setText("Arrêter")
@@ -1042,13 +1173,23 @@ class MainWindow(QMainWindow):
         
     def animation_finished(self):
         sender = self.sender()
-        if sender == self.preview_worker: self.preview_worker = None
-        elif sender == self.export_worker: self.export_worker = None
+        is_export_worker = (sender == self.export_worker)
+
+        if sender == self.preview_worker:
+            self.preview_worker = None
+        elif sender == self.export_worker:
+            self.export_worker = None
+            # Message de succès pour l'export
+            QMessageBox.information(self, "Export terminé", "La vidéo a été exportée avec succès !")
+            self.status_label.setText("Export terminé avec succès")
+
         if self.image_path:
             pixmap = QPixmap(self.image_path)
             current_pixmap_item = next((item for item in self.scene.items() if isinstance(item, QGraphicsPixmapItem)), None)
-            if current_pixmap_item: current_pixmap_item.setPixmap(pixmap)
-            else: self.scene.addPixmap(pixmap)
+            if current_pixmap_item:
+                current_pixmap_item.setPixmap(pixmap)
+            else:
+                self.scene.addPixmap(pixmap)
             self.update_brightness_overlay()
             self.sync_scene_from_data()
         self.btn_preview.setText("Animer")
